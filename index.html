@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FloodForm Developer — Flood-Adjusted Land Valuation · Houston–Beaumont</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#070b12; --panel:#0c121f; --panel2:#111a2b; --panel3:#0a1019;
+  --border:#1b2942; --border2:#26395a;
+  --cyan:#35c8e8; --teal:#2dd4bf; --amber:#f5a524; --green:#34d399;
+  --red:#f43f5e; --gold:#e8b339; --purple:#a78bfa;
+  --text:#c4d4e4; --text2:#8aa0bb; --dim:#5a7088; --faint:#33465f;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:'Space Grotesk',system-ui,sans-serif;
+  overflow:hidden;
+  display:grid; grid-template-rows:54px 1fr;
+}
+.mono{font-family:'IBM Plex Mono',monospace}
+
+/* ── HEADER ── */
+#hdr{
+  display:flex; align-items:center; gap:14px; padding:0 18px;
+  background:linear-gradient(180deg,#0d1422,#0a0f1a);
+  border-bottom:1px solid var(--border); position:relative; z-index:1000;
+}
+#hdr::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),var(--cyan),transparent);opacity:.5}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:26px;height:26px;flex-shrink:0}
+.brand{font-size:16px;font-weight:700;letter-spacing:.5px;color:#eaf4ff}
+.brand b{color:var(--gold)}
+.tag{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);
+  border-left:1px solid var(--border);padding-left:12px}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.live-dot{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text2)}
+.live-dot span{width:7px;height:7px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── LAYOUT ── */
+#main{display:grid;grid-template-columns:1fr 460px;overflow:hidden;min-height:0}
+@media(max-width:1080px){#main{grid-template-columns:1fr 400px}}
+
+/* ── MAP SIDE ── */
+#mapside{position:relative;min-width:0;display:flex;flex-direction:column}
+#map{flex:1;background:#0a0f18;min-height:0}
+.leaflet-container{background:#0a0f18;font-family:'IBM Plex Mono',monospace}
+.click-hint{position:absolute;left:14px;bottom:14px;z-index:600;
+  background:rgba(10,16,26,.9);border:1px solid var(--border2);color:var(--text2);
+  font-size:11px;letter-spacing:.3px;padding:7px 11px;border-radius:7px;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none}
+.click-hint::first-letter{color:var(--gold)}
+.map-note{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:500;background:rgba(10,16,25,.92);border:1px solid var(--border2);
+  padding:14px 18px;border-radius:8px;font-size:12px;color:var(--text2);
+  max-width:320px;text-align:center;display:none}
+
+/* search bar floating on map */
+.searchbar{position:absolute;top:14px;left:14px;right:14px;z-index:600;
+  display:flex;gap:8px;pointer-events:none}
+.searchbar > *{pointer-events:auto}
+.addr-input{flex:1;background:rgba(10,16,26,.94);border:1px solid var(--border2);
+  border-radius:8px;padding:11px 14px;color:#eaf4ff;font-size:13.5px;
+  font-family:'Space Grotesk',sans-serif;outline:none;
+  box-shadow:0 6px 24px rgba(0,0,0,.4);transition:border-color .2s}
+.addr-input:focus{border-color:var(--cyan)}
+.addr-input::placeholder{color:var(--dim)}
+.go-btn{background:linear-gradient(180deg,var(--cyan),#1ba6c6);color:#04222b;
+  border:none;border-radius:8px;padding:0 18px;font-weight:700;font-size:13px;
+  letter-spacing:.5px;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.4);
+  transition:filter .15s}
+.go-btn:hover{filter:brightness(1.1)}
+.go-btn:disabled{opacity:.5;cursor:wait}
+
+/* cross-section strip under map */
+#xsection{height:122px;flex-shrink:0;background:var(--panel3);
+  border-top:1px solid var(--border);position:relative;padding:8px 14px 6px}
+.xs-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);
+  margin-bottom:2px}
+#xsvg{width:100%;height:86px;display:block}
+.coords{position:absolute;right:14px;top:8px;font-size:9.5px;color:var(--dim);
+  letter-spacing:1px}
+
+/* ── REPORT PANEL ── */
+#panel{background:var(--panel);border-left:1px solid var(--border);
+  overflow-y:auto;overflow-x:hidden;min-width:0}
+#panel::-webkit-scrollbar{width:8px}
+#panel::-webkit-scrollbar-track{background:var(--panel3)}
+#panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;padding:40px 32px;text-align:center;gap:14px}
+.empty svg{opacity:.5}
+.empty h2{font-size:17px;font-weight:600;color:var(--text)}
+.empty p{font-size:12.5px;color:var(--dim);line-height:1.6;max-width:300px}
+
+.sect{border-bottom:1px solid var(--border)}
+.sect-h{display:flex;align-items:center;gap:8px;padding:11px 18px 8px;
+  font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--cyan)}
+.sect-h .ix{font-family:'IBM Plex Mono',monospace;color:var(--faint);font-size:10px}
+.sect-body{padding:2px 18px 16px}
+
+/* address header card */
+#addrCard{padding:16px 18px 14px;background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border-bottom:1px solid var(--border)}
+.addr-line{font-size:15px;font-weight:600;color:#eaf4ff;line-height:1.35}
+.addr-sub{font-size:11px;color:var(--dim);margin-top:3px}
+.parcel-id{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+  font-size:11px;color:var(--text2);line-height:1.5}
+.pid-tag{background:rgba(232,179,57,.16);color:var(--gold);font-size:8.5px;font-weight:700;
+  letter-spacing:1px;padding:2px 6px;border-radius:4px}
+.pid-num{color:var(--gold);font-weight:600}
+.pid-meta{color:var(--text2)}
+.parcel-id.pid-miss{color:var(--faint);font-size:10.5px}
+
+/* crosshair signals click-to-identify; Leaflet swaps to grabbing while panning */
+.leaflet-grab,.leaflet-container{cursor:crosshair}
+.leaflet-dragging .leaflet-grab,.leaflet-dragging .leaflet-container{cursor:grabbing}
+
+/* deal inputs */
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field.full{grid-column:1 / -1}
+.field label{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text2)}
+.field input,.field select{background:var(--panel3);border:1px solid var(--border);
+  border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;
+  font-family:'IBM Plex Mono',monospace;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--cyan)}
+.field select{font-family:'Space Grotesk',sans-serif;cursor:pointer}
+.field .hint{font-size:9px;color:var(--faint)}
+.run-row{display:flex;gap:8px;margin-top:11px}
+.run-btn{flex:1;background:linear-gradient(180deg,var(--gold),#c8941f);color:#231603;
+  border:none;border-radius:7px;padding:11px;font-weight:700;font-size:13px;
+  letter-spacing:.5px;cursor:pointer;transition:filter .15s}
+.run-btn:hover{filter:brightness(1.08)}
+.export-btn{width:100%;background:transparent;border:1px solid var(--border2);
+  color:var(--text);border-radius:8px;padding:11px;font-family:'Space Grotesk',sans-serif;
+  font-size:12.5px;font-weight:600;letter-spacing:.4px;cursor:pointer;transition:all .15s}
+.export-btn:hover{border-color:var(--gold);color:var(--gold);background:rgba(232,179,57,.06)}
+.export-btn:disabled{opacity:.5;cursor:wait}
+
+/* score ring */
+.score-row{display:flex;align-items:center;gap:16px}
+.ring{position:relative;width:84px;height:84px;flex-shrink:0}
+.ring svg{transform:rotate(-90deg)}
+.ring-num{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.ring-num b{font-size:24px;font-weight:700;line-height:1;font-family:'IBM Plex Mono',monospace}
+.ring-num small{font-size:8px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;margin-top:2px}
+.score-meta{flex:1;font-size:12px;line-height:1.7;color:var(--text2)}
+.score-meta b{color:var(--text)}
+
+/* data rows */
+.drow{display:flex;justify-content:space-between;align-items:baseline;
+  padding:6px 0;border-bottom:1px solid rgba(27,41,66,.5);font-size:12.5px}
+.drow:last-child{border-bottom:none}
+.drow .k{color:var(--text2)}
+.drow .v{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:500;text-align:right}
+.drow .v.good{color:var(--green)}.drow .v.warn{color:var(--amber)}.drow .v.bad{color:var(--red)}
+
+/* zone chip */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:20px;
+  font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+
+/* WATERFALL — signature element */
+.waterfall{display:flex;flex-direction:column;gap:0;margin-top:6px}
+.wf-row{display:grid;grid-template-columns:118px 1fr 92px;align-items:center;
+  gap:8px;padding:3px 0;font-size:11.5px}
+.wf-label{color:var(--text2);font-size:11px}
+.wf-bar-track{height:18px;position:relative;background:rgba(255,255,255,.025);border-radius:2px}
+.wf-bar{position:absolute;top:0;height:18px;border-radius:2px;transition:width .5s ease,left .5s ease}
+.wf-val{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:11.5px}
+.wf-val.sub{color:var(--red)}.wf-val.add{color:var(--text)}
+.wf-row.total{border-top:1px solid var(--border2);margin-top:5px;padding-top:8px}
+.wf-row.total .wf-label{color:var(--gold);font-weight:700;font-size:12.5px;letter-spacing:.5px}
+.wf-row.total .wf-val{color:var(--gold);font-weight:700;font-size:15px}
+
+/* verdict */
+.verdict{margin:2px 18px 16px;border-radius:10px;padding:15px 16px;
+  border:1px solid var(--border2);position:relative;overflow:hidden}
+.verdict::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px}
+.verdict.go{background:linear-gradient(100deg,rgba(52,211,153,.12),transparent)}
+.verdict.go::before{background:var(--green)}
+.verdict.negotiate{background:linear-gradient(100deg,rgba(245,165,36,.12),transparent)}
+.verdict.negotiate::before{background:var(--amber)}
+.verdict.redesign{background:linear-gradient(100deg,rgba(167,139,250,.12),transparent)}
+.verdict.redesign::before{background:var(--purple)}
+.verdict.avoid{background:linear-gradient(100deg,rgba(244,63,94,.12),transparent)}
+.verdict.avoid::before{background:var(--red)}
+.verdict-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.verdict-label{font-size:21px;font-weight:700;letter-spacing:.5px}
+.verdict.go .verdict-label{color:var(--green)}
+.verdict.negotiate .verdict-label{color:var(--amber)}
+.verdict.redesign .verdict-label{color:var(--purple)}
+.verdict.avoid .verdict-label{color:var(--red)}
+.verdict-headline{font-size:12px;color:var(--text2);line-height:1.5;margin-top:7px}
+.verdict-spread{text-align:right;font-family:'IBM Plex Mono',monospace}
+.verdict-spread b{font-size:17px;display:block}
+.verdict-spread small{font-size:8.5px;letter-spacing:1px;color:var(--dim);text-transform:uppercase}
+
+/* AI brief */
+.ai-brief{font-size:12.5px;line-height:1.65;color:var(--text2);
+  background:var(--panel3);border:1px solid var(--border);border-radius:8px;padding:13px 14px}
+.ai-brief.loading{color:var(--dim);font-style:italic}
+.ai-brief strong{color:var(--text)}
+
+.assump-toggle{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--cyan);
+  cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px;margin-top:4px}
+.assump-toggle:hover{color:#5fd8f3}
+.assump{display:none;margin-top:8px}
+.assump.open{display:block}
+
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);
+  border-top-color:var(--cyan);border-radius:50%;animation:rot .7s linear infinite;
+  vertical-align:-2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.disclaimer{padding:12px 18px 22px;font-size:9.5px;color:var(--faint);line-height:1.6}
+
+/* effective vs draft outlook */
+.twocol{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin:2px 0 4px}
+.oc{background:var(--panel3);border:1px solid var(--border);border-radius:8px;padding:11px 12px;text-align:center}
+.oc-tag{font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+.oc-zone{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;line-height:1}
+.oc-sub{font-size:9.5px;color:var(--text2);margin-top:5px;line-height:1.3}
+.oc-arrow{color:var(--faint);font-size:18px}
+.oc-note{font-size:10px;color:var(--dim);line-height:1.5;margin-top:8px}
+.flag{font-size:11px;line-height:1.5;border-radius:6px;padding:9px 11px;margin-top:9px}
+.flag.warn{background:rgba(245,165,36,.1);border:1px solid rgba(245,165,36,.35);color:var(--amber)}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="logo">
+    <svg class="logo-mark" viewBox="0 0 32 32" fill="none">
+      <path d="M16 3 L27 22 Q16 30 5 22 Z" stroke="#35c8e8" stroke-width="1.6" fill="rgba(53,200,232,.08)"/>
+      <path d="M7 19 q4.5 4 9 0 t9 0" stroke="#e8b339" stroke-width="1.6" fill="none"/>
+      <path d="M8.5 23 q3.7 3 7.5 0 t7.5 0" stroke="#35c8e8" stroke-width="1.3" fill="none" opacity=".6"/>
+    </svg>
+  </div>
+  <div>
+    <div class="brand">Flood<b>Form</b> Developer</div>
+  </div>
+  <div class="tag">Flood-Adjusted Land Valuation · Houston–Beaumont</div>
+  <div class="hdr-right">
+    <div class="live-dot"><span></span>Live FEMA · USGS · NWS</div>
+  </div>
+</div>
+
+<div id="main">
+  <!-- MAP SIDE -->
+  <div id="mapside">
+    <div id="map"></div>
+    <div class="click-hint">⌖ Click any lot to identify &amp; price it</div>
+    <div class="map-note" id="mapNote"></div>
+    <div class="searchbar">
+      <input id="addr" class="addr-input" placeholder="Enter a Houston-area address or parcel — e.g. 1019 Commerce St, Houston TX"
+        value="1600 Allen Pkwy, Houston, TX" autocomplete="off"/>
+      <button id="goBtn" class="go-btn">Analyze</button>
+    </div>
+    <div id="xsection">
+      <div class="xs-title">Elevation cross-section — ground vs. base flood elevation</div>
+      <svg id="xsvg" viewBox="0 0 600 86" preserveAspectRatio="none"></svg>
+      <div class="coords mono" id="coords">— , —</div>
+    </div>
+  </div>
+
+  <!-- REPORT PANEL -->
+  <div id="panel">
+    <div class="empty" id="emptyState">
+      <svg width="56" height="56" viewBox="0 0 32 32" fill="none">
+        <path d="M16 3 L27 22 Q16 30 5 22 Z" stroke="#35c8e8" stroke-width="1.4" fill="rgba(53,200,232,.06)"/>
+        <path d="M7 19 q4.5 4 9 0 t9 0" stroke="#e8b339" stroke-width="1.4" fill="none"/>
+      </svg>
+      <h2>Price the parcel, not just the flood risk</h2>
+      <p>Enter an address, then your land price and intended use. FloodForm pulls live FEMA flood zone, base flood elevation, ground elevation and bayou gauge data — then returns buildable capacity, a flood-derived resilience premium, your maximum land offer, and a buy / negotiate / redesign / avoid call.</p>
+    </div>
+    <div id="report" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   FloodForm Developer — flood-adjusted land valuation
+   Live data: US Census geocoder, FEMA NFHL, USGS EPQS + NWIS, NWS
+   ════════════════════════════════════════════════════════════════ */
+
+const HOUSTON = [29.7589, -95.3677];
+let map, marker, zoneLayer, parcelLayer, paneReady=false;
+let lastSite = null;   // holds the resolved site data between flood lookup and valuation
+
+/* ── MAP INIT (with sandbox-safe sizing) ── */
+function initMap(){
+  map = L.map('map',{center:HOUSTON, zoom:13, zoomControl:false, attributionControl:false});
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  map.createPane('femaPane'); map.getPane('femaPane').style.zIndex = 410;
+  map.createPane('parcelPane'); map.getPane('parcelPane').style.zIndex = 420;
+  paneReady = true;
+
+  const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    {maxZoom:19, subdomains:'abcd'});
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19});
+  let tilesOk=false;
+  carto.on('load', ()=>{tilesOk=true;});
+  carto.on('tileerror', ()=>{ if(!tilesOk){ map.removeLayer(carto); osm.addTo(map);} });
+  carto.addTo(map);
+  osm.on('tileerror', ()=>{ showMapNote('External map tiles appear blocked in this sandbox. Data lookups still work — type an address and analyze.'); });
+
+  // sandbox sizing fixes — Leaflet inits at 0px inside iframes
+  setTimeout(()=>map.invalidateSize(), 60);
+  setTimeout(()=>map.invalidateSize(), 400);
+  setTimeout(()=>map.invalidateSize(), 1200);
+  if(window.ResizeObserver){
+    new ResizeObserver(()=>map.invalidateSize()).observe(document.getElementById('map'));
+  }
+  window.addEventListener('resize', ()=>map.invalidateSize());
+
+  map.on('click', e=>{ runAddressFromLatLng(e.latlng.lat, e.latlng.lng); });
+}
+function showMapNote(t){ const n=document.getElementById('mapNote'); n.textContent=t; n.style.display='block'; }
+
+/* ── GEOCODING ──
+   Runs inside a sandboxed (null-origin) iframe, so requests must be CORS-safe:
+   - Census geocoder sends NO CORS headers → call it via JSONP (script injection).
+   - Nominatim/Photon allow wildcard CORS → use SIMPLE GET (no custom headers,
+     which would force a preflight the null origin can fail). */
+function jsonp(url, timeout=6500){
+  return new Promise((resolve,reject)=>{
+    const cb='cb_'+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');
+    let done=false;
+    const cleanup=()=>{ try{delete window[cb];}catch(e){window[cb]=undefined;} if(s.parentNode)s.remove(); };
+    const t=setTimeout(()=>{ if(!done){done=true;cleanup();reject(new Error('timeout'));} }, timeout);
+    window[cb]=data=>{ if(done)return; done=true; clearTimeout(t); cleanup(); resolve(data); };
+    s.onerror=()=>{ if(done)return; done=true; clearTimeout(t); cleanup(); reject(new Error('load error')); };
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    document.head.appendChild(s);
+  });
+}
+
+async function geocode(addr){
+  // 1) US Census geocoder via JSONP — most accurate for US street addresses
+  try{
+    const u='https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address='
+      +encodeURIComponent(addr)+'&benchmark=Public_AR_Current&format=json';
+    const j=await jsonp(u);
+    const m=j?.result?.addressMatches?.[0];
+    if(m) return {lat:+m.coordinates.y, lng:+m.coordinates.x, label:m.matchedAddress, src:'Census'};
+  }catch(e){}
+  // 2) Nominatim — simple GET, no custom headers (avoids CORS preflight)
+  try{
+    const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q='
+      +encodeURIComponent(addr);
+    const r=await fetch(u); const j=await r.json();
+    if(j&&j[0]) return {lat:+j[0].lat, lng:+j[0].lon, label:j[0].display_name, src:'OSM'};
+  }catch(e){}
+  // 3) Photon (Komoot) — CORS-enabled fallback
+  try{
+    const u='https://photon.komoot.io/api/?limit=1&q='+encodeURIComponent(addr);
+    const r=await fetch(u); const j=await r.json();
+    const f=j?.features?.[0];
+    if(f){
+      const c=f.geometry.coordinates, p=f.properties||{};
+      const label=[p.housenumber&&p.street?`${p.housenumber} ${p.street}`:(p.street||p.name),p.city,p.state,p.postcode]
+        .filter(Boolean).join(', ')||addr;
+      return {lat:+c[1], lng:+c[0], label, src:'Photon'};
+    }
+  }catch(e){}
+  return null;
+}
+
+/* ── REVERSE GEOCODING — clicked point → street address ──
+   Turns a map click into a real address so the selection behaves like a typed
+   search. Simple GETs only (wildcard CORS), with a Photon fallback. */
+async function reverseGeocode(lat,lng){
+  // 1) Nominatim reverse
+  try{
+    const u=`https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`;
+    const r=await fetch(u); const j=await r.json();
+    if(j){
+      const a=j.address||{};
+      const street=[a.house_number, a.road].filter(Boolean).join(' ');
+      const label=[street||a.neighbourhood||a.suburb, a.city||a.town||a.village, a.state, a.postcode]
+        .filter(Boolean).join(', ');
+      if(label) return label;
+      if(j.display_name) return j.display_name;
+    }
+  }catch(e){}
+  // 2) Photon reverse
+  try{
+    const u=`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
+    const r=await fetch(u); const j=await r.json();
+    const p=j?.features?.[0]?.properties;
+    if(p){
+      const label=[p.housenumber&&p.street?`${p.housenumber} ${p.street}`:(p.street||p.name),
+        p.city, p.state, p.postcode].filter(Boolean).join(', ');
+      if(label) return label;
+    }
+  }catch(e){}
+  return null;
+}
+
+/* ── FEMA NFHL flood zone (layer 28 fills) + BFE line (layer 16) ── */
+async function femaZone(lat,lng){
+  const base='https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer';
+  const out={zone:null, subtype:null, bfe:null, depth:null, geom:null, error:false};
+  // identify flood hazard zone polygon (layer 28)
+  try{
+    const u=`${base}/28/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint`
+      +`&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=FLD_ZONE,ZONE_SUBTY,STATIC_BFE,DEPTH`
+      +`&returnGeometry=true&outSR=4326&f=json`;
+    const r=await fetch(u); const j=await r.json();
+    if(j.error){ out.error=true; }
+    const f=j?.features?.[0];
+    if(f){
+      out.zone=f.attributes.FLD_ZONE;
+      out.subtype=f.attributes.ZONE_SUBTY;
+      if(f.attributes.STATIC_BFE && f.attributes.STATIC_BFE>-9000) out.bfe=f.attributes.STATIC_BFE;
+      if(f.attributes.DEPTH && f.attributes.DEPTH>0) out.depth=f.attributes.DEPTH;
+      out.geom=f.geometry;
+    }
+  }catch(e){ out.error=true; }
+  // BFE often lives on the line layer (16) for riverine AE zones, not the polygon
+  if(out.bfe==null && (out.zone==='AE'||out.zone==='A'||out.zone==='AH')){
+    try{
+      const d=0.0016; // ~150m box
+      const env=`${lng-d},${lat-d},${lng+d},${lat+d}`;
+      const u=`${base}/16/query?geometry=${env}&geometryType=esriGeometryEnvelope&inSR=4326`
+        +`&spatialRel=esriSpatialRelIntersects&outFields=ELEV&returnGeometry=false&f=json`;
+      const r=await fetch(u); const j=await r.json();
+      const elevs=(j.features||[]).map(f=>f.attributes.ELEV).filter(v=>v&&v>-9000);
+      if(elevs.length) out.bfe=elevs.reduce((a,b)=>a+b,0)/elevs.length;
+    }catch(e){}
+  }
+  return out;
+}
+function drawZone(geom){
+  if(zoneLayer){ map.removeLayer(zoneLayer); zoneLayer=null; }
+  if(!geom||!geom.rings) return;
+  const latlngs = geom.rings.map(r=>r.map(p=>[p[1],p[0]]));
+  zoneLayer = L.polygon(latlngs,{pane:'femaPane',color:'#35c8e8',weight:1.4,
+    fillColor:'#35c8e8',fillOpacity:.14}).addTo(map);
+}
+
+/* ── HCAD PARCEL identify (Harris County Appraisal District) ──
+   Public ArcGIS layer; click or geocode resolves the lot polygon, size and ID.
+   If the service is unreachable (CORS/offline), we fall back to point-only. */
+const HCAD_PARCELS = 'https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0';
+async function parcelLookup(lat,lng){
+  try{
+    const u=`${HCAD_PARCELS}/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint`
+      +`&inSR=4326&spatialRel=esriSpatialRelIntersects`
+      +`&outFields=HCAD_NUM,StatedArea,Acreage,SiteNumber,owner_name_1`
+      +`&returnGeometry=true&outSR=4326&f=json`;
+    const r=await fetch(u); const j=await r.json();
+    const f=j?.features?.[0];
+    if(!f) return null;
+    const a=f.attributes||{};
+    let areaSF=null;
+    const ac=parseFloat(a.Acreage);
+    if(!isNaN(ac) && ac>0) areaSF = ac*43560;
+    if(areaSF==null){ const sa=parseFloat((a.StatedArea||'').replace(/[^0-9.]/g,'')); if(!isNaN(sa)&&sa>500) areaSF=sa; }
+    if(areaSF==null && f.geometry?.rings) areaSF=ringAreaSF(f.geometry.rings[0]);
+    return {
+      hcad:a.HCAD_NUM||null, owner:a.owner_name_1||null,
+      site:a.SiteNumber||null, acreage:isNaN(ac)?null:ac,
+      areaSF: areaSF?Math.round(areaSF):null, geom:f.geometry
+    };
+  }catch(e){ return null; }
+}
+// planar polygon area (lat/lng → sq ft) via local equirectangular projection
+function ringAreaSF(ring){
+  if(!ring||ring.length<3) return null;
+  const lat0=ring[0][1]*Math.PI/180;
+  const mPerDegLat=111320, mPerDegLng=111320*Math.cos(lat0);
+  let a=0;
+  for(let i=0,n=ring.length;i<n;i++){
+    const [x1,y1]=ring[i], [x2,y2]=ring[(i+1)%n];
+    const X1=x1*mPerDegLng, Y1=y1*mPerDegLat, X2=x2*mPerDegLng, Y2=y2*mPerDegLat;
+    a += X1*Y2 - X2*Y1;
+  }
+  return Math.abs(a/2)*10.7639; // m² → ft²
+}
+function drawParcel(geom){
+  if(parcelLayer){ map.removeLayer(parcelLayer); parcelLayer=null; }
+  if(!geom||!geom.rings) return;
+  const latlngs = geom.rings.map(r=>r.map(p=>[p[1],p[0]]));
+  parcelLayer = L.polygon(latlngs,{pane:'parcelPane',color:'#e8b339',weight:2.2,
+    fillColor:'#e8b339',fillOpacity:.10}).addTo(map);
+}
+
+/* ── USGS ground elevation (EPQS) ── */
+async function groundElev(lat,lng){
+  try{
+    const u=`https://epqs.nationalmap.gov/v1/json?x=${lng}&y=${lat}&units=Feet&wkid=4326&includeDate=false`;
+    const r=await fetch(u); const j=await r.json();
+    const v=parseFloat(j?.value);
+    if(!isNaN(v)) return v;
+  }catch(e){}
+  return null;
+}
+
+/* ── USGS nearest stream gauge (NWIS) ── */
+async function nearestGauge(lat,lng){
+  try{
+    const d=0.25;
+    const bbox=`${(lng-d).toFixed(4)},${(lat-d).toFixed(4)},${(lng+d).toFixed(4)},${(lat+d).toFixed(4)}`;
+    const u=`https://waterservices.usgs.gov/nwis/iv/?format=json&bBox=${bbox}&parameterCd=00065&siteStatus=active`;
+    const r=await fetch(u); const j=await r.json();
+    const ts=j?.value?.timeSeries||[];
+    if(!ts.length) return null;
+    const s=ts[0];
+    const val=s.values?.[0]?.value?.[0]?.value;
+    return {name:s.sourceInfo.siteName, gageHt:parseFloat(val),
+      site:s.sourceInfo.siteCode?.[0]?.value};
+  }catch(e){}
+  return null;
+}
+
+/* ── NWS active flood alerts ── */
+async function floodAlerts(lat,lng){
+  try{
+    const u=`https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lng.toFixed(4)}`;
+    const r=await fetch(u); const j=await r.json();
+    const fl=(j.features||[]).filter(f=>/flood/i.test(f.properties?.event||''));
+    return fl.map(f=>f.properties.event);
+  }catch(e){ return []; }
+}
+
+/* ── DRAFT FLOODPLAIN OUTLOOK (MAAPnext / FEMA preliminary) ──
+   The authoritative Harris County draft floodplain lives in HCFCD's MAAPnext
+   viewer (hcfcd.org/MAAPnext). If you have a verified, CORS-enabled ArcGIS
+   query endpoint for the draft floodplain polygons, set DRAFT_FLOODPLAIN_QUERY
+   to a function(lat,lng)->zoneString and the tool will use live data.
+   Until then we show a MODELED scenario, clearly labelled, grounded in the
+   public record: the draft expands the 100-yr floodplain ~43% (≈150k→200k
+   acres) and the new 100-yr boundary roughly aligns with the old 500-yr line. */
+const DRAFT_FLOODPLAIN_QUERY = null;   // e.g. async (lat,lng)=>'AE'
+
+async function draftScenario(site){
+  // 1) live endpoint if configured
+  if(typeof DRAFT_FLOODPLAIN_QUERY === 'function'){
+    try{
+      const z = await DRAFT_FLOODPLAIN_QUERY(site.lat, site.lng);
+      if(z) return {source:'live', zone:z, modeled:false};
+    }catch(e){}
+  }
+  // 2) modeled scenario (illustrative, NOT official)
+  const z=(site.zone||'').toUpperCase();
+  const g=site.ground;
+  let draft, note;
+  if(/^(VE|V)/.test(z)){ draft='VE'; note='Coastal high-hazard under both maps.'; }
+  else if(/^(AE|A|AH|AO)/.test(z)){ draft=z; note='Already high-risk; draft is unlikely to improve and may deepen.'; }
+  else if(z.startsWith('X') && /0\.2|SHADED|MODERATE/.test((site.subtype||'').toUpperCase())){
+    draft='AE*'; note='0.2% (500-yr) lots commonly shift to 1% (AE) under the draft — the new 100-yr ≈ old 500-yr.';
+  }
+  else if(z==='X' || z===''){ // minimal / unmapped — use elevation + nearby BFE as a proxy
+    if(site.bfe!=null){ draft='AE*'; note='A mapped flood source sits nearby; draft expansion plausibly pulls this parcel into AE.'; }
+    else if(g!=null && g<=30){ draft='X (0.2%)*'; note='Low elevation; draft may add a 0.2% (shaded-X) designation.'; }
+    else { draft='X'; note='No strong signal of reclassification under the draft.'; }
+  }
+  else { draft=z||'—'; note='Insufficient signal to model a change.'; }
+  return {source:'modeled', zone:draft, modeled:true, note};
+}
+// did the draft pull the parcel into a Special Flood Hazard Area it wasn't in?
+function draftTriggersSFHA(effZone, draftZone){
+  const eff=/^(AE|A|AH|AO|VE|V)/.test((effZone||'').toUpperCase());
+  const drf=/^(AE|A|AH|AO|VE|V)/.test((draftZone||'').replace('*','').toUpperCase());
+  return !eff && drf;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SCORING — resilience 0..100
+   ════════════════════════════════════════════════════════════════ */
+function zoneRisk(zone){
+  if(!zone) return {label:'Unmapped', risk:'unknown', base:55};
+  const z=zone.toUpperCase();
+  if(z==='VE'||z==='V')  return {label:'Coastal high hazard (VE)', risk:'severe', base:8};
+  if(z==='AE')           return {label:'1% annual flood (AE)', risk:'high', base:24};
+  if(z==='AO')           return {label:'Sheet-flow flooding (AO)', risk:'high', base:30};
+  if(z==='A'||z==='AH')  return {label:'1% annual flood (A)', risk:'high', base:28};
+  if(z==='X'&&true)      return {label:'Reduced / minimal (X)', risk:'low', base:80};
+  if(z.startsWith('X'))  return {label:'Moderate risk (0.2% — shaded X)', risk:'moderate', base:62};
+  if(z==='D')            return {label:'Undetermined (D)', risk:'unknown', base:50};
+  return {label:zone, risk:'moderate', base:58};
+}
+function freeboard(ground, bfe){ return (ground!=null && bfe!=null) ? ground-bfe : null; }
+
+function computeResilience(site){
+  const zr=zoneRisk(site.zone);
+  let s=zr.base;
+  const fb=freeboard(site.ground, site.bfe);
+  if(fb!=null){
+    if(fb>=3) s+=14; else if(fb>=1) s+=8; else if(fb>=0) s+=2;
+    else if(fb>=-2) s-=12; else s-=24;
+  }
+  if(site.ground!=null){ if(site.ground>=60) s+=6; else if(site.ground<=25) s-=8; }
+  if(site.gauge && !isNaN(site.gauge.gageHt)){ if(site.gauge.gageHt>20) s-=6; }
+  if(site.alerts && site.alerts.length) s-=10;
+  if(site.depth && site.depth>=2) s-=8;
+  s=Math.max(2,Math.min(99,Math.round(s)));
+  return {score:s, zr, fb};
+}
+function scoreColor(s){ return s>=70?'#34d399':s>=45?'#f5a524':'#f43f5e'; }
+
+/* ════════════════════════════════════════════════════════════════
+   VALUATION ENGINE — the market-driven layer
+   Maximum Land Offer = Stabilized Value − Hard − Soft
+                        − Flood-Resilience Premium − Required Profit − Risk Buffer
+   ════════════════════════════════════════════════════════════════ */
+
+// product programs by intended use (Houston small-developer norms)
+const PROGRAMS = {
+  townhouse:   {label:'Townhouses',        far:1.6, eff:.85, unitSF:2000, valPerSF:295, rentPerSF:0,    hardSF:138},
+  duplex:      {label:'Duplex',            far:1.1, eff:.87, unitSF:1350, valPerSF:255, rentPerSF:0,    hardSF:135},
+  small_mf:    {label:'Small multifamily', far:2.4, eff:.80, unitSF:900,  valPerSF:0,   rentPerSF:2.30, hardSF:158},
+  mixed_use:   {label:'Mixed-use',         far:3.0, eff:.78, unitSF:950,  valPerSF:0,   rentPerSF:2.55, hardSF:182},
+  single:      {label:'Single-family',     far:0.7, eff:.90, unitSF:2400, valPerSF:250, rentPerSF:0,    hardSF:132},
+};
+
+/* Property-level flood-insurance estimate — Risk Rating 2.0 proxy.
+   RR 2.0 prices on property factors (elevation/first-floor height above BFE,
+   replacement cost, distance to water), NOT the zone line. Maps now mainly set
+   the *requirement* to carry coverage. We model an annual premium per building
+   and a lender-mandate flag. Planning-grade — confirm with a quote. */
+function insuranceEstimate(site, res, perUnitReplacement, units){
+  const z=(site.zone||'').toUpperCase();
+  // base annual $ at ~$250k coverage, building at-BFE
+  const base = /^(VE|V)/.test(z) ? 3800
+             : /^(AE|A|AH)/.test(z) ? 1300
+             : z==='AO' ? 1050
+             : (z.startsWith('X') && /0\.2|SHADED|MODERATE/.test((site.subtype||'').toUpperCase())) ? 720
+             : z==='X' ? 540
+             : z==='D' ? 850 : 900;
+  // first-floor height above BFE is RR 2.0's strongest lever
+  const fb=res.fb;
+  let fbFactor=1;
+  if(fb!=null){
+    fbFactor = fb>=4 ? 0.5 : fb>=2 ? 0.65 : fb>=0 ? 0.9 : fb>=-2 ? 1.7 : 2.8;
+  }
+  // replacement-cost scaling (construction cost ≈ replacement value)
+  const repFactor = Math.max(0.5, Math.min(1.6, perUnitReplacement/250000));
+  const perUnit = Math.round(base * fbFactor * repFactor);
+  const total = perUnit * Math.max(1,units);
+  // mandatory if in a Special Flood Hazard Area (federally-backed loans)
+  const inSFHA = /^(AE|A|AH|AO|VE|V)/.test(z);
+  const requirement = inSFHA ? 'mandatory'
+    : (z.startsWith('X') && /0\.2|SHADED|MODERATE/.test((site.subtype||'').toUpperCase())) ? 'recommended'
+    : 'not-required';
+  return {perUnit, total, requirement, base, fbFactor};
+}
+
+// flood-resilience premium derived from live flood data
+function resiliencePremium(site, res, buildableSF){
+  const z = (site.zone||'').toUpperCase();
+  // base premium $/SF by zone — flood-resistant materials, drainage, detention
+  let perSF = z==='VE'||z==='V' ? 58
+            : z==='AE' ? 32
+            : z==='AO' ? 24
+            : (z==='A'||z==='AH') ? 28
+            : z.startsWith('X') ? 8
+            : 12;
+  // required structural elevation above grade to clear BFE + 2ft freeboard target
+  const target = (site.bfe!=null && site.ground!=null)
+      ? Math.max(0, (site.bfe + 2) - site.ground)
+      : (z==='AO' && site.depth ? site.depth + 1 : (/^(AE|A|AH|VE|V)/.test(z)?3:0));
+  // lots already above BFE+freeboard avoid elevating occupied space — drainage/materials only
+  const inFloodZone = /^(AE|A|AH|VE|V)/.test(z);
+  const compliant = inFloodZone && target<=0 && site.bfe!=null && site.ground!=null;
+  if(compliant) perSF *= 0.5;
+  // elevated foundation / pier cost scales per foot of lift, per unit footprint
+  const liftPerFtPerSF = 9;            // $/SF per foot of elevation
+  const premium = buildableSF*perSF + buildableSF*target*liftPerFtPerSF*0.15;
+  return {perSF:Math.round(perSF), requiredLiftFt:target, premium:Math.round(premium), compliant};
+}
+
+function runValuation(site, res, inputs){
+  const P = PROGRAMS[inputs.use] || PROGRAMS.townhouse;
+  const far = inputs.far>0 ? inputs.far : P.far;
+  const parcelSF = inputs.parcelSF;
+
+  // buildable capacity
+  const grossSF = parcelSF * far;
+  const netSF   = grossSF * P.eff;
+  const units   = Math.max(1, Math.floor(netSF / P.unitSF));
+
+  // costs
+  const hardSFcost = inputs.hardSF>0 ? inputs.hardSF : P.hardSF;
+  const hard = grossSF * hardSFcost;
+  const soft = hard * (inputs.softPct/100);
+
+  // flood-resilience premium (from live flood data)
+  const fp = resiliencePremium(site, res, grossSF);
+  const flood = fp.premium;
+
+  // property-level flood-insurance estimate (RR 2.0 proxy)
+  const perUnitReplacement = P.unitSF * hardSFcost;
+  const ins = insuranceEstimate(site, res, perUnitReplacement, units);
+
+  // stabilized value — sale or income (computed WITHOUT insurance; insurance is
+  // shown as its own value-impact line so the two flood costs stay visible)
+  let stabilized, valMode;
+  if(P.valPerSF>0){
+    stabilized = netSF * P.valPerSF; valMode='sale';
+  }else{
+    const annualRent = netSF * P.rentPerSF * 12;
+    const noi = annualRent * 0.67;             // 33% opex (flood insurance broken out below)
+    stabilized = noi / (inputs.capRate/100);
+    valMode='income';
+  }
+
+  // flood-insurance value impact
+  let insImpact;
+  if(valMode==='income'){
+    insImpact = ins.total / (inputs.capRate/100);          // NOI drag, capitalized
+  }else{
+    const dryBaseline = units * 550;                        // clean-X baseline premium
+    const excess = Math.max(0, ins.total - dryBaseline);   // flood-driven excess only
+    insImpact = Math.min(excess * 7, 0.045 * stabilized);  // buyer capitalizes excess; capped
+  }
+  insImpact = Math.round(insImpact);
+
+  // required developer profit + risk buffer
+  const profit = stabilized * (inputs.profitPct/100);
+  const riskPct = res.score>=70 ? 3 : res.score>=45 ? 6 : 11;
+  const risk = stabilized * (riskPct/100);
+
+  const maxOffer = stabilized - hard - soft - flood - insImpact - profit - risk;
+  const margin = (stabilized>0)? ((stabilized-hard-soft-flood-insImpact-(inputs.landPrice||0))/stabilized*100):0;
+
+  return {P, far, parcelSF, grossSF, netSF, units, hard, soft, flood, fp,
+    ins, insImpact, stabilized, valMode, profit, profitPct:inputs.profitPct, risk, riskPct,
+    maxOffer, margin, landPrice:inputs.landPrice};
+}
+
+function decideVerdict(v, res, site){
+  const ask = v.landPrice||0;
+  const offer = v.maxOffer;
+  const z=(site.zone||'').toUpperCase();
+  const severe = (z==='VE'||z==='V') || (res.score<22);
+
+  if(severe && offer < ask*0.6)
+    return {key:'avoid', label:'AVOID', headline:'Severe, hard-to-mitigate flood exposure overwhelms the residual land value at this asking price.'};
+  if(ask>0 && offer >= ask)
+    return {key:'go', label:'GO', headline:`Residual land value clears the ask with ${fmt$(offer-ask)} of headroom after flood-resilience cost and target profit.`};
+  if(ask>0 && offer >= ask*0.85)
+    return {key:'negotiate', label:'NEGOTIATE', headline:`You're ${fmt$(ask-offer)} over a viable basis — a price concession or trimmed scope closes the gap.`};
+  if(offer > 0)
+    return {key:'redesign', label:'REDESIGN', headline:'Current program is thin at this price. Test a denser or different use to lift residual value before walking.'};
+  return {key:'avoid', label:'AVOID', headline:'Development cost plus flood-resilience premium exceeds stabilized value — no viable land basis here.'};
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ORCHESTRATION
+   ════════════════════════════════════════════════════════════════ */
+async function runAddress(){
+  const addr=document.getElementById('addr').value.trim();
+  if(!addr) return;
+  setBusy(true,'Locating address…');
+  const g=await geocode(addr);
+  if(!g){
+    setBusy(false);
+    showMapNote("Couldn't resolve that address. Include the street number, city, and state (e.g. \"1019 Commerce St, Houston, TX\"), or click the parcel directly on the map.");
+    return;
+  }
+  document.getElementById('mapNote').style.display='none';
+  await loadSite(g.lat,g.lng,g.label);
+}
+async function runAddressFromLatLng(lat,lng){
+  setBusy(true,'Identifying address…');
+  const addr = await reverseGeocode(lat,lng);
+  // push the resolved address into the search bar so the selection is explicit
+  if(addr) document.getElementById('addr').value = addr;
+  document.getElementById('mapNote').style.display='none';
+  const label = addr || `Pin · ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  await loadSite(lat,lng,label);
+}
+
+async function loadSite(lat,lng,label){
+  map.setView([lat,lng],16);
+  if(marker) map.removeLayer(marker);
+  marker=L.marker([lat,lng]).addTo(map);
+  document.getElementById('coords').textContent=`${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  setBusy(true,'Pulling FEMA · USGS · NWS · HCAD…');
+  const [fema, ground, gauge, alerts, parcel] = await Promise.all([
+    femaZone(lat,lng), groundElev(lat,lng), nearestGauge(lat,lng), floodAlerts(lat,lng), parcelLookup(lat,lng)
+  ]);
+  drawZone(fema.geom);
+  drawParcel(parcel && parcel.geom);
+
+  const site={ lat,lng,label,
+    zone:fema.zone, subtype:fema.subtype, bfe:fema.bfe, depth:fema.depth,
+    femaError:fema.error, ground, gauge, alerts, parcel };
+  site.draft = await draftScenario(site);
+  lastSite=site;
+  const res=computeResilience(site);
+  drawCrossSection(site,res);
+  renderReport(site,res);
+  setBusy(false);
+}
+
+function setBusy(on,msg){
+  const b=document.getElementById('goBtn');
+  b.disabled=on; b.textContent= on ? '…' : 'Analyze';
+  if(on && msg){ /* lightweight */ }
+}
+
+/* ── elevation cross-section ── */
+function drawCrossSection(site,res){
+  const svg=document.getElementById('xsvg'); svg.innerHTML='';
+  const W=600,H=86;
+  const ns='http://www.w3.org/2000/svg';
+  const g=site.ground, bfe=site.bfe;
+  const known = g!=null;
+  // scale: center on ground, show ±8ft window or bfe span
+  let lo,hi;
+  if(known && bfe!=null){ lo=Math.min(g,bfe)-3; hi=Math.max(g,bfe)+4; }
+  else if(known){ lo=g-6; hi=g+6; }
+  else { lo=0; hi=12; }
+  const span=Math.max(6,hi-lo);
+  const y=v=> H-6 - ((v-lo)/span)*(H-22);
+
+  function line(x1,yy1,x2,yy2,stroke,w,dash){
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',x1);l.setAttribute('y1',yy1);l.setAttribute('x2',x2);l.setAttribute('y2',yy2);
+    l.setAttribute('stroke',stroke);l.setAttribute('stroke-width',w);
+    if(dash)l.setAttribute('stroke-dasharray',dash);svg.appendChild(l);
+  }
+  function txt(x,yy,t,fill,anchor,size){
+    const e=document.createElementNS(ns,'text');
+    e.setAttribute('x',x);e.setAttribute('y',yy);e.setAttribute('fill',fill);
+    e.setAttribute('font-size',size||9);e.setAttribute('font-family','IBM Plex Mono');
+    e.setAttribute('text-anchor',anchor||'start');e.textContent=t;svg.appendChild(e);
+  }
+  // ground terrain
+  if(known){
+    const gy=y(g);
+    const path=document.createElementNS(ns,'path');
+    path.setAttribute('d',`M0 ${gy+2} Q150 ${gy-3} 300 ${gy+1} T600 ${gy} L600 ${H} L0 ${H} Z`);
+    path.setAttribute('fill','rgba(120,90,60,.18)');path.setAttribute('stroke','#8a6a48');
+    path.setAttribute('stroke-width','1.3');svg.appendChild(path);
+    txt(8,gy-5,`Ground ${g.toFixed(1)} ft`,'#caa57a','start',9.5);
+  }else{
+    txt(8,H/2,'Ground elevation unavailable','#5a7088');
+  }
+  // base flood elevation
+  if(bfe!=null){
+    const by=y(bfe);
+    line(0,by,600,by,'#35c8e8',1.6,'6 4');
+    // water fill below BFE
+    const wf=document.createElementNS(ns,'rect');
+    wf.setAttribute('x',0);wf.setAttribute('y',by);wf.setAttribute('width',600);
+    wf.setAttribute('height',Math.max(0,H-by));wf.setAttribute('fill','rgba(53,200,232,.08)');
+    svg.insertBefore(wf,svg.firstChild);
+    txt(592,by-5,`BFE ${bfe.toFixed(1)} ft`,'#35c8e8','end',9.5);
+    if(known){
+      const fb=g-bfe;
+      txt(300,14,`${fb>=0?'+':''}${fb.toFixed(1)} ft freeboard`,
+        fb>=0?'#34d399':'#f43f5e','middle',10.5);
+    }
+  }else{
+    txt(592,16,site.zone?`No BFE published (${site.zone})`:'No flood data','#5a7088','end',9);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER
+   ════════════════════════════════════════════════════════════════ */
+function fmt$(n){
+  if(n==null||isNaN(n)) return '—';
+  const a=Math.abs(n); const sign=n<0?'-':'';
+  if(a>=1e6) return sign+'$'+(a/1e6).toFixed(2)+'M';
+  if(a>=1e3) return sign+'$'+Math.round(a/1e3)+'K';
+  return sign+'$'+Math.round(a);
+}
+function fmtFull$(n){ return (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString(); }
+function fmtSF(n){ return Math.round(n).toLocaleString()+' SF'; }
+
+function renderReport(site,res){
+  document.getElementById('emptyState').style.display='none';
+  const R=document.getElementById('report'); R.style.display='block';
+
+  const zr=res.zr;
+  const fb=res.fb;
+  const chipColor = scoreColor(res.score);
+  const insPreview = insuranceEstimate(site, res, 250000, 1);
+
+  // restore inputs if a prior run exists, else defaults
+  const dflt = lastInputs || {use:'townhouse', landPrice:'', parcelSF:6000, far:0,
+    hardSF:0, softPct:22, profitPct:15, capRate:5.5};
+  // a freshly identified parcel overrides the lot size with its real area
+  const parcelSF = (site.parcel && site.parcel.areaSF) ? site.parcel.areaSF
+                 : (lastInputs ? lastInputs.parcelSF : 6000);
+
+  R.innerHTML = `
+  <div id="addrCard">
+    <div class="addr-line">${site.label||'Selected parcel'}</div>
+    <div class="addr-sub mono">${site.lat.toFixed(5)}, ${site.lng.toFixed(5)} · Harris County region</div>
+    ${site.parcel ? `<div class="parcel-id">
+        <span class="pid-tag">HCAD</span>
+        <span class="pid-num mono">${site.parcel.hcad||'—'}</span>
+        ${site.parcel.areaSF?`<span class="pid-meta">${site.parcel.areaSF.toLocaleString()} SF${site.parcel.acreage?` · ${site.parcel.acreage.toFixed(2)} ac`:''}</span>`:''}
+        ${site.parcel.owner?`<span class="pid-meta">${site.parcel.owner}</span>`:''}
+      </div>` : `<div class="parcel-id pid-miss">Lot boundary not identified — click directly on a parcel, or set size manually below.</div>`}
+  </div>
+
+  <!-- FLOOD INTELLIGENCE -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">01</span> Flood intelligence</div>
+    <div class="sect-body">
+      <div class="score-row" style="margin-bottom:12px">
+        <div class="ring">
+          <svg width="84" height="84">
+            <circle cx="42" cy="42" r="36" stroke="#1b2942" stroke-width="7" fill="none"/>
+            <circle cx="42" cy="42" r="36" stroke="${chipColor}" stroke-width="7" fill="none"
+              stroke-linecap="round" stroke-dasharray="${2*Math.PI*36}"
+              stroke-dashoffset="${2*Math.PI*36*(1-res.score/100)}"/>
+          </svg>
+          <div class="ring-num"><b style="color:${chipColor}">${res.score}</b><small>Resilience</small></div>
+        </div>
+        <div class="score-meta">
+          <span class="chip" style="background:${chipColor}22;color:${chipColor}">${zr.label}</span><br>
+          <b>${verdictWord(res.score)}</b> site resilience for development.
+          ${site.femaError?'<br><span style="color:#f5a524">FEMA service hiccup — retry for zone detail.</span>':''}
+        </div>
+      </div>
+      <div class="drow"><span class="k">FEMA flood zone</span><span class="v ${zr.risk==='low'?'good':zr.risk==='severe'||zr.risk==='high'?'bad':'warn'}">${site.zone||'Unmapped'}${site.subtype?' · '+site.subtype:''}</span></div>
+      <div class="drow"><span class="k">Base flood elevation</span><span class="v">${site.bfe!=null?site.bfe.toFixed(1)+' ft':'Not published'}</span></div>
+      <div class="drow"><span class="k">Ground elevation</span><span class="v">${site.ground!=null?site.ground.toFixed(1)+' ft':'—'}</span></div>
+      <div class="drow"><span class="k">Freeboard (ground − BFE)</span><span class="v ${fb==null?'':fb>=1?'good':fb>=0?'warn':'bad'}">${fb!=null?(fb>=0?'+':'')+fb.toFixed(1)+' ft':'—'}</span></div>
+      ${site.depth?`<div class="drow"><span class="k">AO sheet-flow depth</span><span class="v warn">${site.depth.toFixed(1)} ft</span></div>`:''}
+      ${site.gauge?`<div class="drow"><span class="k">Nearest gauge · ${shortName(site.gauge.name)}</span><span class="v">${isNaN(site.gauge.gageHt)?'—':site.gauge.gageHt.toFixed(1)+' ft'}</span></div>`:''}
+      <div class="drow"><span class="k">Active NWS flood alerts</span><span class="v ${site.alerts.length?'bad':'good'}">${site.alerts.length?site.alerts.join(', '):'None'}</span></div>
+      <div class="drow"><span class="k">Flood insurance for financing</span><span class="v ${reqClass(insPreview.requirement)}">${reqLabel(insPreview.requirement)}</span></div>
+      <div class="drow"><span class="k">Est. premium · RR 2.0 proxy</span><span class="v">${fmtFull$(insPreview.perUnit)}/unit·yr</span></div>
+    </div>
+  </div>
+
+  <!-- EFFECTIVE vs DRAFT OUTLOOK -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">02</span> Effective vs draft outlook ${site.draft.modeled?'<span style="color:var(--faint);letter-spacing:1px">· modeled</span>':'<span style="color:var(--green)">· live</span>'}</div>
+    <div class="sect-body">
+      <div class="twocol">
+        <div class="oc">
+          <div class="oc-tag">Effective · FEMA (official)</div>
+          <div class="oc-zone" style="color:${zoneTone(site.zone)}">${site.zone||'Unmapped'}</div>
+          <div class="oc-sub">In force today · sets insurance &amp; permits</div>
+        </div>
+        <div class="oc-arrow">→</div>
+        <div class="oc">
+          <div class="oc-tag">Draft outlook · MAAPnext</div>
+          <div class="oc-zone" style="color:${zoneTone(site.draft.zone)}">${site.draft.zone}</div>
+          <div class="oc-sub">${site.draft.modeled?'Modeled scenario — illustrative':'Live draft data'}</div>
+        </div>
+      </div>
+      ${draftTriggersSFHA(site.zone, site.draft.zone)
+        ? `<div class="flag warn">⚠ The draft would pull this parcel into a high-risk zone it isn't in today — on adoption (≈2–3 yr) it would trigger a mandatory-insurance requirement for federally backed financing. Underwrite for it now.</div>`
+        : ''}
+      ${site.draft.note?`<div class="oc-note">${site.draft.note}</div>`:''}
+      <div class="oc-note">${site.draft.modeled
+        ? 'Modeled from the public record (draft 100-yr floodplain ≈ +43%; new 100-yr ≈ old 500-yr). Not the official draft — verify at <a href="https://www.hcfcd.org/MAAPnext" target="_blank" rel="noopener" style="color:var(--cyan)">hcfcd.org/MAAPnext</a>.'
+        : 'Live draft query. Confirm at <a href="https://www.hcfcd.org/MAAPnext" target="_blank" rel="noopener" style="color:var(--cyan)">hcfcd.org/MAAPnext</a>.'}</div>
+    </div>
+  </div>
+
+  <!-- DEAL INPUTS -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">03</span> Your deal</div>
+    <div class="sect-body">
+      <div class="field-grid">
+        <div class="field full">
+          <label>Intended use</label>
+          <select id="i-use">
+            ${Object.entries(PROGRAMS).map(([k,p])=>`<option value="${k}" ${dflt.use===k?'selected':''}>${p.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Land asking price</label>
+          <input id="i-land" type="number" placeholder="e.g. 240000" value="${dflt.landPrice}"/>
+        </div>
+        <div class="field">
+          <label>Parcel size (SF)</label>
+          <input id="i-parcel" type="number" value="${Math.round(parcelSF)}"/>
+          <span class="hint">${site.parcel&&site.parcel.areaSF?'from HCAD parcel · editable':'5,000 SF lot ≈ 0.11 ac'}</span>
+        </div>
+      </div>
+      <div class="run-row"><button class="run-btn" id="valBtn">Calculate maximum land offer</button></div>
+      <div class="assump-toggle" id="assumpToggle">▸ Adjust development assumptions</div>
+      <div class="assump" id="assumpBox">
+        <div class="field-grid" style="margin-top:4px">
+          <div class="field"><label>FAR override</label><input id="i-far" type="number" step="0.1" placeholder="auto" value="${dflt.far||''}"/><span class="hint">blank = program default</span></div>
+          <div class="field"><label>Hard cost $/SF</label><input id="i-hard" type="number" placeholder="auto" value="${dflt.hardSF||''}"/></div>
+          <div class="field"><label>Soft cost %</label><input id="i-soft" type="number" value="${dflt.softPct}"/></div>
+          <div class="field"><label>Target profit %</label><input id="i-profit" type="number" value="${dflt.profitPct}"/></div>
+          <div class="field"><label>Cap rate % (income)</label><input id="i-cap" type="number" step="0.1" value="${dflt.capRate}"/></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="valOut"></div>
+  <div class="disclaimer">
+    Estimates only. Effective flood data is FEMA NFHL; the draft outlook is a modeled scenario unless a live MAAPnext endpoint is configured — verify drafts at hcfcd.org/MAAPnext. Flood-insurance figures are a Risk Rating 2.0–style proxy, not a quote; confirm with an NFIP/private carrier. Cost, value, capacity, and offer figures are planning-grade Houston defaults; confirm zoning/deed restrictions, comps, engineered resilience scope, and financing terms before committing capital. Not lending, legal, insurance, or investment advice.
+  </div>
+  `;
+
+  // wire up
+  document.getElementById('assumpToggle').onclick=()=>{
+    const b=document.getElementById('assumpBox'); const t=document.getElementById('assumpToggle');
+    b.classList.toggle('open'); t.textContent=(b.classList.contains('open')?'▾':'▸')+' Adjust development assumptions';
+  };
+  document.getElementById('valBtn').onclick=()=>doValuation(site,res);
+
+  // auto-run valuation if we already have a land price
+  if(dflt.landPrice) doValuation(site,res);
+}
+
+let lastInputs=null;
+function doValuation(site,res){
+  const gv=id=>document.getElementById(id);
+  const inputs={
+    use: gv('i-use').value,
+    landPrice: parseFloat(gv('i-land').value)||0,
+    parcelSF: parseFloat(gv('i-parcel').value)||6000,
+    far: parseFloat(gv('i-far').value)||0,
+    hardSF: parseFloat(gv('i-hard').value)||0,
+    softPct: parseFloat(gv('i-soft').value)||22,
+    profitPct: parseFloat(gv('i-profit').value)||15,
+    capRate: parseFloat(gv('i-cap').value)||5.5,
+  };
+  lastInputs=inputs;
+  const v=runValuation(site,res,inputs);
+  const verdict=decideVerdict(v,res,site);
+  lastReport={site,res,v,verdict,briefText:null};
+  renderValuation(v,verdict,site,res);
+  writeBrief(site,res,v,verdict);
+}
+let lastReport=null;
+
+function renderValuation(v,verdict,site,res){
+  const out=document.getElementById('valOut');
+  // waterfall scaling
+  const max=v.stabilized||1;
+  const w=x=>Math.max(2,Math.min(100,(Math.abs(x)/max)*100));
+  const ask=v.landPrice;
+
+  out.innerHTML=`
+  <!-- CAPACITY -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">04</span> Buildable capacity</div>
+    <div class="sect-body">
+      <div class="drow"><span class="k">Program</span><span class="v">${v.P.label} · FAR ${v.far.toFixed(1)}</span></div>
+      <div class="drow"><span class="k">Gross buildable area</span><span class="v">${fmtSF(v.grossSF)}</span></div>
+      <div class="drow"><span class="k">Net leasable / saleable</span><span class="v">${fmtSF(v.netSF)}</span></div>
+      <div class="drow"><span class="k">Yield</span><span class="v" style="color:var(--cyan)">${v.units} ${v.units>1?'units':'unit'}</span></div>
+      <div class="drow"><span class="k">Required structural lift</span><span class="v ${v.fp.requiredLiftFt>0?'warn':'good'}">${v.fp.requiredLiftFt>0?'+'+v.fp.requiredLiftFt.toFixed(1)+' ft above grade':'At grade'}</span></div>
+      <div class="drow"><span class="k">Flood insurance · project/yr</span><span class="v ${v.ins.requirement==='mandatory'?'warn':''}">${fmtFull$(v.ins.total)}${v.ins.requirement==='mandatory'?' · required':''}</span></div>
+    </div>
+  </div>
+
+  <!-- WATERFALL -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">05</span> Maximum land offer</div>
+    <div class="sect-body">
+      <div class="waterfall">
+        ${wfRow('Stabilized value', v.stabilized, 'add', '#34d399', w(v.stabilized))}
+        ${wfRow('Hard construction', -v.hard, 'sub', '#f43f5e', w(v.hard))}
+        ${wfRow('Soft cost', -v.soft, 'sub', '#f43f5e', w(v.soft), 'Soft cost')}
+        ${wfRow('Flood-resilience (build)', -v.flood, 'sub', '#35c8e8', w(v.flood))}
+        ${wfRow('Flood-insurance impact', -v.insImpact, 'sub', '#2dd4bf', w(v.insImpact))}
+        ${wfRow('Required profit ('+v.profitPct+'%)', -v.profit, 'sub', '#f5a524', w(v.profit))}
+        ${wfRow('Risk buffer ('+v.riskPct+'%)', -v.risk, 'sub', '#a78bfa', w(v.risk))}
+        <div class="wf-row total">
+          <div class="wf-label">Maximum land offer</div>
+          <div></div>
+          <div class="wf-val" style="color:var(--gold)">${fmtFull$(v.maxOffer)}</div>
+        </div>
+      </div>
+      <div class="drow" style="margin-top:10px"><span class="k">Flood-resilience build cost</span><span class="v" style="color:var(--cyan)">${fmtFull$(v.flood)} · $${v.fp.perSF}/SF</span></div>
+      <div class="drow"><span class="k">Flood-insurance value drag</span><span class="v" style="color:var(--teal)">${fmtFull$(v.insImpact)} · ${v.valMode==='income'?'NOI/cap':'buyer-capitalized'}</span></div>
+      <div class="drow"><span class="k">Project margin on cost</span><span class="v ${v.margin>=18?'good':v.margin>=10?'warn':'bad'}">${v.margin.toFixed(1)}%</span></div>
+    </div>
+  </div>
+
+  <!-- VERDICT -->
+  <div class="sect-h" style="padding-bottom:4px"><span class="ix">06</span> Recommendation</div>
+  <div class="verdict ${verdict.key}">
+    <div class="verdict-top">
+      <div class="verdict-label">${verdict.label}</div>
+      <div class="verdict-spread">
+        <b style="color:${ask>0 ? (v.maxOffer>=ask?'var(--green)':'var(--red)') : 'var(--text2)'}">${ask>0?fmtFull$(v.maxOffer-ask):'—'}</b>
+        <small>${ask>0?'offer vs ask':'enter land price'}</small>
+      </div>
+    </div>
+    <div class="verdict-headline">${verdict.headline}</div>
+  </div>
+  <div style="padding:0 18px 14px">
+    <button class="export-btn" id="exportBtn">⤓ Download one-page report (PDF)</button>
+  </div>
+
+  <!-- AI BRIEF -->
+  <div class="sect">
+    <div class="sect-h"><span class="ix">07</span> Deal brief</div>
+    <div class="sect-body">
+      <div class="ai-brief loading" id="aiBrief"><span class="spin"></span> Writing the underwriting brief…</div>
+    </div>
+  </div>
+  `;
+  const eb=document.getElementById('exportBtn');
+  if(eb) eb.onclick=exportPDF;
+}
+
+function wfRow(label,val,cls,color,width,labelOverride){
+  const negative = val<0;
+  const left = negative ? (100-width) : 0;
+  return `<div class="wf-row">
+    <div class="wf-label">${labelOverride||label}</div>
+    <div class="wf-bar-track"><div class="wf-bar" style="width:${width}%;left:${left}%;background:${color}"></div></div>
+    <div class="wf-val ${cls}">${fmtFull$(val)}</div>
+  </div>`;
+}
+
+function verdictWord(s){ return s>=70?'Strong':s>=45?'Moderate':'Weak'; }
+function shortName(n){ return (n||'').replace(/ at /i,' @ ').slice(0,22); }
+function reqLabel(r){ return r==='mandatory'?'Mandatory (SFHA)':r==='recommended'?'Recommended':'Not required'; }
+function reqClass(r){ return r==='mandatory'?'bad':r==='recommended'?'warn':'good'; }
+function zoneTone(z){
+  const u=(z||'').replace('*','').toUpperCase();
+  if(/^(VE|V)/.test(u)) return '#f43f5e';
+  if(/^(AE|A|AH|AO)/.test(u)) return '#f5a524';
+  if(u.startsWith('X')&&u.length>1) return '#f5a524';
+  if(u==='X') return '#34d399';
+  return '#8aa0bb';
+}
+
+/* ── AI BRIEF (Anthropic API; rule-based fallback) ── */
+async function writeBrief(site,res,v,verdict){
+  const el=document.getElementById('aiBrief');
+  const ctx = {
+    address: site.label, zone: site.zone||'unmapped', bfe: site.bfe,
+    ground: site.ground, freeboard: res.fb, resilience: res.score,
+    alerts: site.alerts, use: v.P.label, units: v.units,
+    grossSF: Math.round(v.grossSF), stabilized: Math.round(v.stabilized),
+    floodBuildPremium: v.flood, requiredLiftFt: v.fp.requiredLiftFt,
+    floodInsuranceAnnual: v.ins.total, floodInsuranceRequirement: v.ins.requirement,
+    floodInsuranceValueDrag: v.insImpact,
+    draftZone: site.draft.zone, draftIsModeled: site.draft.modeled,
+    draftTriggersMandatoryInsurance: draftTriggersSFHA(site.zone, site.draft.zone),
+    maxOffer: Math.round(v.maxOffer), askingPrice: v.landPrice,
+    margin: +v.margin.toFixed(1), verdict: verdict.label
+  };
+  const prompt = `You are a flood-aware land acquisition analyst for small Houston-area developers. In 4-5 tight sentences, write a plain-English underwriting brief for this parcel. Lead with the call (${ctx.verdict}). Cover three flood angles: (1) build cost — zone ${ctx.zone}, ${ctx.freeboard==null?'no freeboard data':ctx.freeboard.toFixed(1)+'ft freeboard'}, resilience premium ${fmtFull$(ctx.floodBuildPremium)}; (2) carrying cost — est. flood insurance ${fmtFull$(ctx.floodInsuranceAnnual)}/yr (${ctx.floodInsuranceRequirement}); (3) the draft MAAPnext outlook (draft zone ${ctx.draftZone}${ctx.draftIsModeled?', modeled':''}${ctx.draftTriggersMandatoryInsurance?' — would newly trigger mandatory insurance on adoption':''}). Then state what drives the maximum land offer of ${fmtFull$(ctx.maxOffer)} against a ${ctx.askingPrice?fmtFull$(ctx.askingPrice)+' ask':'(no ask entered)'}. Be specific and decisive, no hedging boilerplate. Data: ${JSON.stringify(ctx)}`;
+
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,
+        messages:[{role:'user',content:prompt}]})
+    });
+    const j=await r.json();
+    const txt=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
+    if(txt){ el.classList.remove('loading'); el.innerHTML=txt.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      if(lastReport) lastReport.briefText=txt.replace(/\*\*/g,''); return; }
+    throw new Error('empty');
+  }catch(e){
+    el.classList.remove('loading');
+    const fb=fallbackBrief(site,res,v,verdict);
+    el.innerHTML=fb;
+    if(lastReport) lastReport.briefText=fb.replace(/<[^>]+>/g,'');
+  }
+}
+function fallbackBrief(site,res,v,verdict){
+  const fb=res.fb;
+  const flood = site.zone && /^(AE|A|AO|AH|VE|V)/.test(site.zone.toUpperCase())
+    ? `sits in FEMA zone ${site.zone}${fb!=null?` with ${fb>=0?'+':''}${fb.toFixed(1)}ft of freeboard`:''}, carrying a ${fmtFull$(v.flood)} resilience build premium${v.fp.requiredLiftFt>0?` and ~${v.fp.requiredLiftFt.toFixed(1)}ft of structural lift`:''}`
+    : `carries modest flood exposure (zone ${site.zone||'unmapped'}), keeping the resilience premium light at ${fmtFull$(v.flood)}`;
+  const ins = v.ins.requirement==='mandatory'
+    ? `Flood insurance is mandatory for federally backed financing here, running about ${fmtFull$(v.ins.total)}/yr and dragging value by ${fmtFull$(v.insImpact)}`
+    : `Flood insurance isn't federally required, estimated near ${fmtFull$(v.ins.total)}/yr`;
+  const draft = draftTriggersSFHA(site.zone, site.draft.zone)
+    ? ` The draft MAAPnext outlook is the real watch-item: it would move this parcel to ${site.draft.zone}${site.draft.modeled?' (modeled)':''} and trigger mandatory insurance on adoption — underwrite for it now.`
+    : ` The draft MAAPnext outlook reads ${site.draft.zone}${site.draft.modeled?' (modeled)':''}, no new mandate signalled.`;
+  const ask=v.landPrice;
+  const spread = ask>0 ? (v.maxOffer>=ask
+      ? `clears the ${fmtFull$(ask)} ask with ${fmtFull$(v.maxOffer-ask)} of room`
+      : `falls ${fmtFull$(ask-v.maxOffer)} short of the ${fmtFull$(ask)} ask`)
+    : 'has no asking price entered yet';
+  return `<strong>${verdict.label}.</strong> A ${v.P.label.toLowerCase()} program yields ${v.units} ${v.units>1?'units':'unit'} across ${Math.round(v.grossSF).toLocaleString()} SF, stabilizing near ${fmtFull$(v.stabilized)}. The site ${flood}. ${ins}.${draft} After build, soft cost, those flood costs, and a ${v.profitPct}% profit target, the maximum land offer lands at <strong>${fmtFull$(v.maxOffer)}</strong>, which ${spread}. ${verdict.headline}`;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ONE-PAGE PDF EXPORT — light, branded, leave-behind report
+   ════════════════════════════════════════════════════════════════ */
+function exportPDF(){
+  if(!lastReport){ return; }
+  const {site,res,v,verdict}=lastReport;
+  const brief = lastReport.briefText || (fallbackBrief(site,res,v,verdict).replace(/<[^>]+>/g,''));
+  if(!(window.jspdf && window.jspdf.jsPDF)){ printFallback(site,res,v,verdict,brief); return; }
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});   // 612 x 792
+  const W=612, M=42, CW=W-2*M;
+  // palette (light/print)
+  const ink=[22,32,46], mut=[110,125,145], faint=[150,162,178], line=[214,222,232];
+  const gold=[176,128,12], cyan=[28,140,168], teal=[20,150,140];
+  const vc = verdict.key==='go'?[34,150,90]:verdict.key==='negotiate'?[200,135,20]
+           :verdict.key==='redesign'?[120,90,200]:[200,45,70];
+  const money=n=>(n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
+
+  function txt(s,x,y,sz,col,style,align){doc.setFont('helvetica',style||'normal');doc.setFontSize(sz);
+    doc.setTextColor(col[0],col[1],col[2]);doc.text(String(s),x,y,align?{align}:undefined);}
+  function rule(y,col,wd){doc.setDrawColor((col||line)[0],(col||line)[1],(col||line)[2]);
+    doc.setLineWidth(wd||0.7);doc.line(M,y,W-M,y);}
+
+  // ── header
+  let y=54;
+  txt('FloodForm Developer',M,y,16,ink,'bold');
+  txt(new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),W-M,y,9,mut,'normal','right');
+  txt('Flood-Adjusted Land Valuation · Houston–Beaumont',M,y+13,8.5,mut);
+  y+=22; doc.setDrawColor(gold[0],gold[1],gold[2]);doc.setLineWidth(1.4);doc.line(M,y,W-M,y);
+
+  // ── address
+  y+=22; txt(site.label||'Selected parcel',M,y,12.5,ink,'bold');
+  const pid=site.parcel?[`HCAD ${site.parcel.hcad||'—'}`,
+     site.parcel.areaSF?`${site.parcel.areaSF.toLocaleString()} SF`:null,
+     site.parcel.acreage?`${site.parcel.acreage.toFixed(2)} ac`:null,
+     site.parcel.owner||null].filter(Boolean).join('  ·  ')
+     :`${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`;
+  y+=13; txt(pid,M,y,8.5,mut);
+
+  // ── verdict banner
+  y+=14; const bh=52;
+  doc.setFillColor(vc[0],vc[1],vc[2]);doc.rect(M,y,5,bh,'F');
+  doc.setFillColor(247,249,251);doc.rect(M+5,y,CW-5,bh,'F');
+  txt(verdict.label,M+16,y+24,19,vc,'bold');
+  txt('MAXIMUM LAND OFFER',W-M-12,y+15,7.5,mut,'normal','right');
+  txt(money(v.maxOffer),W-M-12,y+33,17,gold,'bold','right');
+  const ask=v.landPrice;
+  txt(ask>0?`${money(v.maxOffer-ask)} vs ${money(ask)} ask`:'no asking price entered',
+     W-M-12,y+45,8,ask>0?(v.maxOffer>=ask?[34,150,90]:[200,45,70]):mut,'normal','right');
+  const hl=doc.splitTextToSize(verdict.headline,CW-180);
+  txt(hl[0]||'',M+16,y+40,8.5,ink);
+  y+=bh+22;
+
+  // ── two columns
+  const colY=y, LX=M, RX=M+CW/2+10;
+  txt('FLOOD POSTURE',LX,colY,8,cyan,'bold');
+  txt('DEVELOPMENT PROGRAM',RX,colY,8,cyan,'bold');
+  let ly=colY+15, ry=colY+15;
+  const fb=res.fb;
+  const row=(x,yy,k,val,vcol)=>{txt(k,x,yy,8.5,mut);txt(val,x+ (x===LX? CW/2-20 : CW/2-20),yy,8.5,vcol||ink,'bold','right');};
+  // left
+  row(LX,ly,'FEMA zone (effective)',site.zone||'Unmapped'); ly+=14;
+  row(LX,ly,'Base flood elevation',site.bfe!=null?site.bfe.toFixed(1)+' ft':'—'); ly+=14;
+  row(LX,ly,'Ground elevation',site.ground!=null?site.ground.toFixed(1)+' ft':'—'); ly+=14;
+  row(LX,ly,'Freeboard',fb!=null?(fb>=0?'+':'')+fb.toFixed(1)+' ft':'—',fb==null?ink:(fb>=0?[34,150,90]:[200,45,70])); ly+=14;
+  row(LX,ly,'Resilience score',res.score+' / 100'); ly+=14;
+  row(LX,ly,'Insurance for loan',reqLabel(v.ins.requirement),v.ins.requirement==='mandatory'?[200,45,70]:ink); ly+=14;
+  row(LX,ly,'Est. premium',money(v.ins.total)+'/yr'); ly+=14;
+  const dflag=draftTriggersSFHA(site.zone,site.draft.zone);
+  row(LX,ly,'Draft outlook',`${site.zone||'—'} → ${site.draft.zone}`,dflag?[200,135,20]:ink); ly+=14;
+  if(dflag){const w=doc.splitTextToSize('⚠ Draft would trigger mandatory insurance on adoption.',CW/2-20);
+    txt(w[0],LX,ly,7.5,[200,135,20]); ly+=12;}
+  // right
+  row(RX,ry,'Program',v.P.label); ry+=14;
+  row(RX,ry,'FAR',v.far.toFixed(1)); ry+=14;
+  row(RX,ry,'Gross buildable',Math.round(v.grossSF).toLocaleString()+' SF'); ry+=14;
+  row(RX,ry,'Net saleable',Math.round(v.netSF).toLocaleString()+' SF'); ry+=14;
+  row(RX,ry,'Yield',v.units+(v.units>1?' units':' unit')); ry+=14;
+  row(RX,ry,'Structural lift',v.fp.requiredLiftFt>0?'+'+v.fp.requiredLiftFt.toFixed(1)+' ft':'at grade'); ry+=14;
+  row(RX,ry,'Project margin',v.margin.toFixed(1)+'%',v.margin>=18?[34,150,90]:v.margin>=10?[200,135,20]:[200,45,70]); ry+=14;
+
+  y=Math.max(ly,ry)+10; rule(y); y+=18;
+
+  // ── waterfall
+  txt('MAXIMUM LAND OFFER — RESIDUAL LAND VALUE',M,y,8,cyan,'bold'); y+=15;
+  const wf=[['Stabilized value',v.stabilized,ink],['Hard construction',-v.hard,ink],
+    ['Soft cost ('+v.profitPct+'%)',-v.soft,ink],['Flood-resilience (build)',-v.flood,cyan],
+    ['Flood-insurance impact',-v.insImpact,teal],['Required profit ('+v.profitPct+'%)',-v.profit,ink],
+    ['Risk buffer ('+v.riskPct+'%)',-v.risk,ink]];
+  wf.forEach(([k,val,col])=>{
+    txt(k,M+4,y,9,mut); txt(money(val),W-M-4,y,9,col,'normal','right'); y+=15;
+  });
+  y+=2; doc.setDrawColor(gold[0],gold[1],gold[2]);doc.setLineWidth(0.8);doc.line(M,y,W-M,y); y+=15;
+  txt('Maximum land offer',M+4,y,10.5,gold,'bold');
+  txt(money(v.maxOffer),W-M-4,y,13,gold,'bold','right'); y+=20;
+
+  rule(y); y+=18;
+  // ── brief
+  txt('DEAL BRIEF',M,y,8,cyan,'bold'); y+=14;
+  const bl=doc.splitTextToSize(brief,CW);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(60,72,88);
+  bl.slice(0,7).forEach(l=>{doc.text(l,M,y);y+=12.5;});
+
+  // ── footer
+  const fy=760; rule(fy-10,line,0.6);
+  const disc='Estimates only. Effective flood data: FEMA NFHL. Draft outlook is a modeled scenario unless a live MAAPnext endpoint is configured (verify at hcfcd.org/MAAPnext). Insurance is a Risk Rating 2.0–style proxy, not a quote. Figures are planning-grade Houston defaults — confirm zoning/deed restrictions, comps, engineered resilience scope, and financing before committing capital. Not lending, legal, insurance, or investment advice.';
+  const dl=doc.splitTextToSize(disc,CW);
+  doc.setFont('helvetica','normal');doc.setFontSize(6.4);doc.setTextColor(faint[0],faint[1],faint[2]);
+  let dy=fy; dl.slice(0,4).forEach(l=>{doc.text(l,M,dy);dy+=8;});
+  txt('Generated by FloodForm Developer',W-M,fy-22,7,mut,'normal','right');
+
+  const slug=(site.label||'parcel').replace(/[^a-z0-9]+/gi,'-').slice(0,40).replace(/^-|-$/g,'');
+  doc.save(`FloodForm-${slug||'report'}.pdf`);
+}
+
+// fallback: open a printable light-theme page if jsPDF didn't load
+function printFallback(site,res,v,verdict,brief){
+  const money=n=>(n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
+  const ask=v.landPrice;
+  const wf=[['Stabilized value',v.stabilized],['Hard construction',-v.hard],
+    ['Soft cost',-v.soft],['Flood-resilience (build)',-v.flood],['Flood-insurance impact',-v.insImpact],
+    ['Required profit',-v.profit],['Risk buffer',-v.risk]];
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>FloodForm Report</title>
+  <style>body{font:13px/1.5 Arial,sans-serif;color:#16202e;max-width:720px;margin:32px auto;padding:0 20px}
+  h1{font-size:18px;margin:0}.t{color:#6e7d91;font-size:11px}hr{border:none;border-top:1px solid #d6dee8;margin:14px 0}
+  .v{font-size:22px;font-weight:700;color:${verdict.key==='go'?'#229059':verdict.key==='avoid'?'#c82d46':'#c88714'}}
+  .big{font-size:20px;font-weight:700;color:#b0800c;text-align:right}
+  table{width:100%;border-collapse:collapse}td{padding:4px 0}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  .tot td{border-top:2px solid #b0800c;font-weight:700;color:#b0800c;padding-top:8px}
+  .cols{display:flex;gap:24px}.cols>div{flex:1}.k{color:#6e7d91}.foot{color:#9aa6b6;font-size:9px;margin-top:18px}
+  @media print{body{margin:0}}</style></head><body>
+  <h1>FloodForm Developer</h1><div class="t">Flood-Adjusted Land Valuation · ${new Date().toLocaleDateString()}</div><hr>
+  <b>${site.label||'Selected parcel'}</b><div class="t">${site.parcel?`HCAD ${site.parcel.hcad||'—'} · ${site.parcel.areaSF?site.parcel.areaSF.toLocaleString()+' SF':''}`:`${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`}</div>
+  <hr><div class="cols"><div><span class="v">${verdict.label}</span><div>${verdict.headline}</div></div>
+  <div class="big">${money(v.maxOffer)}<div class="t" style="text-align:right">${ask>0?money(v.maxOffer-ask)+' vs '+money(ask)+' ask':'max land offer'}</div></div></div>
+  <hr><div class="cols"><div>
+    <div><span class="k">FEMA zone:</span> ${site.zone||'Unmapped'}</div>
+    <div><span class="k">BFE / ground:</span> ${site.bfe!=null?site.bfe.toFixed(1):'—'} / ${site.ground!=null?site.ground.toFixed(1):'—'} ft</div>
+    <div><span class="k">Freeboard:</span> ${res.fb!=null?(res.fb>=0?'+':'')+res.fb.toFixed(1)+' ft':'—'}</div>
+    <div><span class="k">Resilience:</span> ${res.score}/100</div>
+    <div><span class="k">Insurance:</span> ${reqLabel(v.ins.requirement)} · ${money(v.ins.total)}/yr</div>
+    <div><span class="k">Draft outlook:</span> ${site.zone||'—'} → ${site.draft.zone}</div>
+  </div><div>
+    <div><span class="k">Program:</span> ${v.P.label} · FAR ${v.far.toFixed(1)}</div>
+    <div><span class="k">Gross / net:</span> ${Math.round(v.grossSF).toLocaleString()} / ${Math.round(v.netSF).toLocaleString()} SF</div>
+    <div><span class="k">Yield:</span> ${v.units} units</div>
+    <div><span class="k">Structural lift:</span> ${v.fp.requiredLiftFt>0?'+'+v.fp.requiredLiftFt.toFixed(1)+' ft':'at grade'}</div>
+    <div><span class="k">Margin:</span> ${v.margin.toFixed(1)}%</div>
+  </div></div>
+  <hr><table>${wf.map(([k,val])=>`<tr><td class="k">${k}</td><td>${money(val)}</td></tr>`).join('')}
+  <tr class="tot"><td>Maximum land offer</td><td>${money(v.maxOffer)}</td></tr></table>
+  <hr><b style="font-size:11px">DEAL BRIEF</b><div>${brief}</div>
+  <div class="foot">Estimates only. FEMA NFHL effective data; draft outlook modeled (verify at hcfcd.org/MAAPnext); insurance is an RR 2.0–style proxy, not a quote. Planning-grade — not lending, legal, insurance, or investment advice.</div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
+  try{
+    const w=window.open('','_blank');
+    if(!w){ showMapNote('Pop-up blocked. Open this tool in a full browser tab to export the report.'); return; }
+    w.document.write(html); w.document.close();
+  }catch(e){ showMapNote('Export needs a full browser tab (pop-ups are blocked in this preview).'); }
+}
+
+/* boot */
+initMap();
+document.getElementById('goBtn').onclick=runAddress;
+document.getElementById('addr').addEventListener('keydown',e=>{ if(e.key==='Enter') runAddress(); });
+</script>
+</body>
+</html>
